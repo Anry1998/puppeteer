@@ -7,7 +7,9 @@ export class ParserController {
 
   @Get()
   async login() {
-    return await this.parserService.mainLaunch();
+    const res = await this.parserService.mainLaunch();
+
+    return res
   }
 
   // @Post()

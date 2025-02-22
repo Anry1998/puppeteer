@@ -1,9 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { HttpService } from '@nestjs/axios';
-import { firstValueFrom } from 'rxjs';
+import {map, firstValueFrom, catchError, tap } from 'rxjs';
 import puppeteer from 'puppeteer-extra';
+import { AxiosResponse } from 'axios';
 
 // import { AxiosError, AxiosResponse } from 'axios';
 // const StealthPlugin = require('puppeteer-extra-plugin-stealth');
@@ -42,11 +43,12 @@ export class ParserService {
 
     const url = this.configService.get<string>('SITE_URL')
 
-    // Получаю текущее ws соединение браузера 
+    // Получаю текущее ws соединение браузера  
     const {data}  = await firstValueFrom(
       this.httpService.get('http://localhost:9222/json/version').pipe(),
     );
     const wsDebuggerUrl = data.webSocketDebuggerUrl
+
 
     const browser = await puppeteer.connect({
       browserWSEndpoint: wsDebuggerUrl,
@@ -56,9 +58,11 @@ export class ParserService {
 
     const pages = await browser.pages();
 
+    console.log('pages: ', pages)
+
     // Нахожу открытую страницу по URL.
     const page = pages.find(page => page.url() === url)
-
+     
     // если нет логина, раскомментировать код ниже
 
     // Нахожу первую кнопку войти и кликаю на нее (на странице входа их две)
@@ -77,13 +81,14 @@ export class ParserService {
       result[1].click();
     }); 
 
+
+
     // Может попросить пройти capcha
 
     // await browser.disconnect();
   }  
 
   async mainLaunch() {
-
     const url = this.configService.get<string>('SITE_URL')
 
     const options = { 
@@ -127,6 +132,222 @@ export class ParserService {
     // Нужно пройти capcha
 
     await browser.close();
+
+  }
+
+  async testRequestLaunch() {
+    // const url = 'https://jsonplaceholder.typicode.com/'
+
+    const options = { 
+      headless: Boolean(this.configService.get<string>('HEADLESS') === "true"),
+      ignoreHTTPSErrors: Boolean(this.configService.get<string>('IGNORE_HTTPS_ERRORS') === "yes"),
+    };  
+
+    const browser = await puppeteer.launch(options);
+    
+    const page = await browser.newPage(); 
+    await page.setRequestInterception(true); 
+
+    page.on('request', interceptedRequest => {
+
+      const body = {
+        title: 'foo',
+        body: 'bar',
+        userId: 222222222,
+      }
+
+      var data = {
+          'method': 'POST',
+          'postData': `${JSON.stringify(body)}`
+      };
+      interceptedRequest.continue(data);
+    });
+
+    const response = await page.goto('https://jsonplaceholder.typicode.com/posts');
+    const responseBody = await response.text();
+    console.log('responseBody: ', responseBody); 
+
+    const response2 = await page.goto('https://jsonplaceholder.typicode.com/posts');
+    const responseBody2 = await response2.text();
+    console.log('responseBody2: ', responseBody2); 
+
+    return responseBody
+
+    // page.once('request', request => {
+
+    //   const body = {
+    //     title: 'foo',
+    //     body: 'bar',
+    //     userId: 222222222,
+    //   }
+
+    //   request.continue({ 
+    //     method: 'POST', 
+    //     postData: JSON.stringify(body), 
+    //   });
+    // });
+
+    // await page.goto('https://jsonplaceholder.typicode.com/posts');
+    // console.log(await page.content());
+ 
+
+    
+
+    // const {data}  = await firstValueFrom(
+    //   this.httpService.get('http://localhost:9222/json/version').pipe(),
+    // );
+    // const wsDebuggerUrl = data.webSocketDebuggerUrl
+
+    // const browser = await puppeteer.connect({
+    //   browserWSEndpoint: wsDebuggerUrl,
+    //   defaultViewport: null,
+    // });
+
+    // const pages = await browser.pages();
+
+    // const page = pages.find(page => page.url() === url)
+
+    await page.setRequestInterception(true);
+
+    page.once('request', request => {
+
+      const body = {
+        title: 'foo',
+        body: 'bar',
+        userId: -222222222,
+      }
+
+      request.continue({ 
+        method: 'POST', 
+        postData: JSON.stringify(body), 
+      });
+    });
+
+    await page.goto('https://jsonplaceholder.typicode.com/posts');
+    console.log(await page.content());
+
+
+    // page.on('request', interceptedRequest => {
+
+    //   const body = {
+    //     title: 'foo',
+    //     body: 'bar',
+    //     userId: -222222222,
+    //   }
+      
+    //   var data = {
+    //       'method': 'POST',
+    //       'postData': `${JSON.stringify(body)}}`
+    //   };
+    //   // Request modified... finish sending!
+    //   interceptedRequest.continue(data);
+    // });
+
+    // const response = await page.goto('https://jsonplaceholder.typicode.com/posts');
+    // const responseBody = await response.text();
+    // console.log('responseBody: ', responseBody);
+
+    // const usersName = JSON.stringify({ name: 'John Doe' });
+    // const customConfig = { headers: { 'Content-Type': 'application/json' } };
+    // const result = this.httpService.post('https://testapi.org/post', usersName, customConfig);
+    // console.log(result.data.data);  // '{"name":"John Doe"}'
+    // console.log(result.data.headers['Content-Type']);  // 'application/json'
+
+
+    // const req =  this.httpService
+    //   .get('https://jsonplaceholder.typicode.com/todos/1', {
+    //     headers: { 'Accept': 'application/json'}
+    //   })
+    //   .pipe(
+    //     map((res) => {return res.data}),
+    //   )
+    //   // .pipe(
+    //   //   catchError(() => {
+    //   //     throw new ForbiddenException('Something went wrong');
+    //   //   }),
+    //   // );
+
+
+    // return req
+
+    // const body = {
+    //   title: 'foo',
+    //   body: 'bar',
+    //   userId: -222222222,
+    // }
+
+    // const req =  this.httpService
+    //   .post('https://jsonplaceholder.typicode.com/posts', 
+    //   {body: JSON.stringify(body)}, 
+    //   {headers: { 'Accept': 'application/json'}}
+    //   )
+    //   .pipe(
+    //     // tap((res) => console.log(res)),
+    //     map((res) => {return res.data}),
+    //     // tap((res) => console.log(res)),
+    //   )
+    //   .pipe(
+    //     catchError(() => {
+    //       throw new ForbiddenException('Something went wrong');
+    //     }),
+    //   );
+    // console.log('req: ', req)
+
+    
+
+    // const buttonSecond = 'a[href="/guide"]';
+    // await page.waitForSelector(buttonSecond);
+    // await page.click(buttonSecond);
+
+  }
+
+  async testRequestСonnect() {
+    const url = 'https://jsonplaceholder.typicode.com/'
+
+    const {data}  = await firstValueFrom(
+      this.httpService.get('http://localhost:9222/json/version').pipe(),
+    );
+    const wsDebuggerUrl = data.webSocketDebuggerUrl
+
+    const browser = await puppeteer.connect({ 
+      browserWSEndpoint: wsDebuggerUrl,
+      defaultViewport: null,
+    });
+
+    const pages = await browser.pages();
+
+    const page = pages.find(page => page.url() === url)
+
+    await page.setRequestInterception(true); 
+
+    page.on('request', interceptedRequest => {
+
+      if (interceptedRequest.isInterceptResolutionHandled()) return;
+
+      const body = {
+        title: 'foo',
+        body: 'bar',
+        userId: 222222222,
+      }
+
+      var data = {
+          'method': 'POST',
+          'postData': `${JSON.stringify(body)}`
+      };
+      interceptedRequest.continue(data);
+    });
+
+    const response = await page.goto('https://jsonplaceholder.typicode.com/posts');
+    const responseBody = await response.text();
+    console.log('responseBody: ', responseBody);  
+
+    // page.on('request', interceptedRequest => {
+    //   if (interceptedRequest.isInterceptResolutionHandled()) return;
+    //   interceptedRequest.abort();
+    // });
+    // await page.goto('https://jsonplaceholder.typicode.com/');
+
+    return responseBody
   }
 
   // async connect() {
